@@ -1,0 +1,12 @@
+# elm-package generated files
+elm-stuff/
+
+assets
+
+elm.js
+
+index.html
+
+# elm-repl generated files
+repl-temp-*
+
