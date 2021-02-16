@@ -1,3 +1,5 @@
+module Main exposing (..)
+
 import Browser
 import Html exposing (Html, button, div, text, input)
 import Html.Events exposing (onClick, onInput)
@@ -61,6 +63,10 @@ viewForm model =
     , viewInput "password" "Re-enter Password" model.passwordAgain PasswordAgain
     , viewValidation model
     ]
+
+divide : Float -> Float -> Float
+divide x y =
+    x / y
 
 view : Model -> Html Msg
 view model =

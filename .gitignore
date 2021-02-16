@@ -10,3 +10,5 @@ index.html
 # elm-repl generated files
 repl-temp-*
 
+.vscode
+.idea
