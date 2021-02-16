@@ -11,10 +11,14 @@ several fundamental concepts used in elm-3d-scene:
 
 import Angle exposing (Angle)
 import Array
+import Browser
+import Browser.Events as E
 import Camera3d exposing (Camera3d)
 import Color
 import Direction3d
+import Duration exposing (Duration)
 import Html exposing (Html)
+import Json.Decode as D
 import Length exposing (Length, Meters)
 import Parameter1d
 import Pixels exposing (Pixels)
@@ -133,10 +137,15 @@ camera =
 
 type Msg
     = KeyChanged Bool String
+    | Tick Duration
+    | Resized Float Float
+    | VisibilityChanged E.Visibility
 
 
 type alias Model =
     { keys : Keys
+    , width : Float
+    , height : Float
     }
 
 
@@ -177,9 +186,62 @@ update msg model =
         KeyChanged isDown key ->
             { model | keys = updateKeys isDown key model.keys }
 
+        Tick dt ->
+            model
 
-main : Html msg
-main =
+        Resized width height ->
+            { model
+                | width = width
+                , height = height
+            }
+
+        VisibilityChanged _ ->
+            { model | keys = noKeys }
+
+
+
+-- SUBSCRIPTIONS
+-- Subscribe to animation frames and wrap each time step (a number of
+-- milliseconds) into a Duration value and then into a Tick message
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ E.onResize (\w h -> Resized (toFloat w) (toFloat h))
+        , E.onKeyUp (D.map (KeyChanged False) (D.field "key" D.string))
+        , E.onKeyDown (D.map (KeyChanged True) (D.field "key" D.string))
+        , E.onAnimationFrameDelta (Duration.milliseconds >> Tick)
+        , E.onVisibilityChange VisibilityChanged
+        ]
+
+
+noKeys : Keys
+noKeys =
+    Keys False False False False False
+
+
+init : () -> ( Model, Cmd Msg )
+init _ =
+    ( { keys = noKeys
+      , width = 400
+      , height = 400
+      }
+    , Cmd.none
+    )
+
+
+
+--, Cmd.batch
+--    [ Task.attempt GotTexture (Texture.load "https://elm-lang.org/images/wood-crate.jpg")
+--    , Task.perform (\{ viewport } -> Resized viewport.width viewport.height) Dom.getViewport
+--    ]
+--)
+-- VIEW
+
+
+view : Model -> Html Msg
+view model =
     Scene3d.unlit
         { dimensions = ( Pixels.pixels 1024, Pixels.pixels 768 )
         , camera = camera
@@ -187,3 +249,25 @@ main =
         , background = transparentBackground
         , entities = [ pyramidEntity ]
         }
+
+
+main : Program () Model Msg
+main =
+    Browser.element
+        { init = init
+        , view = view
+        , update = \msg model -> ( update msg model, Cmd.none )
+        , subscriptions = subscriptions
+        }
+
+
+
+--main : Html msg
+--main =
+--    Scene3d.unlit
+--        { dimensions = ( Pixels.pixels 1024, Pixels.pixels 768 )
+--        , camera = camera
+--        , clipDepth = Length.centimeters 5
+--        , background = transparentBackground
+--        , entities = [ pyramidEntity ]
+--        }
