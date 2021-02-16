@@ -22,7 +22,8 @@ import Json.Decode as D
 import Length exposing (Length, Meters)
 import Parameter1d
 import Pixels exposing (Pixels)
-import Point3d
+import Point3d exposing (Point3d)
+import Quantity exposing (Quantity)
 import Scene3d exposing (Background, Entity, transparentBackground)
 import Scene3d.Material as Material
 import Scene3d.Mesh as Mesh exposing (Mesh, Plain, points)
@@ -122,32 +123,13 @@ pyramidMesh =
     Mesh.indexedFacets triangularMesh
 
 
-camera : Camera3d Meters coordinates
-camera =
-    Camera3d.perspective
-        { viewpoint =
-            Viewpoint3d.lookAt
-                { focalPoint = Point3d.origin
-                , eyePoint = Point3d.centimeters 40 20 30
-                , upDirection = Direction3d.positiveZ
-                }
-        , verticalFieldOfView = Angle.degrees 20
-        }
 
 
 type Msg
     = KeyChanged Bool String
     | Tick Duration
-    | Resized Float Float
+    | Resized Int Int
     | VisibilityChanged E.Visibility
-
-
-type alias Model =
-    { keys : Keys
-    , width : Float
-    , height : Float
-    }
-
 
 type alias Keys =
     { up : Bool
@@ -179,6 +161,20 @@ updateKeys isDown key keys =
         _ ->
             keys
 
+setCamera: Camera3d Meters WorldCoordinates -> World -> World
+setCamera newCamera world =
+    { world | camera = newCamera }
+
+updateWorld : Model -> World
+updateWorld model =
+  let
+    newCamera = camera 40 20 30
+    newWorld = setCamera newCamera model.world
+  in
+    case model.keys.down of
+      True -> newWorld
+      _    -> model.world
+
 
 update : Msg -> Model -> Model
 update msg model =
@@ -187,12 +183,12 @@ update msg model =
             { model | keys = updateKeys isDown key model.keys }
 
         Tick dt ->
-            model
+            { model | world = (updateWorld model) }
 
         Resized width height ->
             { model
-                | width = width
-                , height = height
+                | width = Pixels.pixels width
+                , height = Pixels.pixels height
             }
 
         VisibilityChanged _ ->
@@ -208,7 +204,7 @@ update msg model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ E.onResize (\w h -> Resized (toFloat w) (toFloat h))
+        [ E.onResize (\width height -> Resized width height)
         , E.onKeyUp (D.map (KeyChanged False) (D.field "key" D.string))
         , E.onKeyDown (D.map (KeyChanged True) (D.field "key" D.string))
         , E.onAnimationFrameDelta (Duration.milliseconds >> Tick)
@@ -220,12 +216,39 @@ noKeys : Keys
 noKeys =
     Keys False False False False False
 
+type alias World =
+  {
+    camera: Camera3d Meters WorldCoordinates
+  }
+
+type alias Model =
+    { keys : Keys
+    , world : World
+    , width : Quantity Int Pixels
+    , height : Quantity Int Pixels
+    }
+
+camera: Float -> Float -> Float -> Camera3d Meters WorldCoordinates
+camera x y z =
+    Camera3d.perspective
+        { viewpoint =
+            Viewpoint3d.lookAt
+                { focalPoint = Point3d.origin
+                , eyePoint = Point3d.centimeters x y z
+                , upDirection = Direction3d.positiveZ
+                }
+        , verticalFieldOfView = Angle.degrees 20
+        }
+
+initWorld : World
+initWorld = World (camera 40 20 30)
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { keys = noKeys
-      , width = 400
-      , height = 400
+      , world = initWorld
+      , width = Pixels.pixels 1024
+      , height = Pixels.pixels 768
       }
     , Cmd.none
     )
@@ -243,8 +266,8 @@ init _ =
 view : Model -> Html Msg
 view model =
     Scene3d.unlit
-        { dimensions = ( Pixels.pixels 1024, Pixels.pixels 768 )
-        , camera = camera
+        { dimensions = ( model.width, model.height )
+        , camera = model.world.camera
         , clipDepth = Length.centimeters 5
         , background = transparentBackground
         , entities = [ pyramidEntity ]
