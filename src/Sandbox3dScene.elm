@@ -28,6 +28,7 @@ import Scene3d exposing (Background, Entity, transparentBackground)
 import Scene3d.Material as Material
 import Scene3d.Mesh as Mesh exposing (Mesh, Plain, points)
 import TriangularMesh
+import Vector3d
 import Viewpoint3d exposing (Viewpoint3d)
 
 
@@ -123,13 +124,12 @@ pyramidMesh =
     Mesh.indexedFacets triangularMesh
 
 
-
-
 type Msg
     = KeyChanged Bool String
     | Tick Duration
     | Resized Int Int
     | VisibilityChanged E.Visibility
+
 
 type alias Keys =
     { up : Bool
@@ -161,19 +161,38 @@ updateKeys isDown key keys =
         _ ->
             keys
 
-setCamera: Camera3d Meters WorldCoordinates -> World -> World
-setCamera newCamera world =
-    { world | camera = newCamera }
+
+setCamera : CameraPosition -> World -> World
+setCamera newCameraPosition world =
+    { world | cameraPosition = newCameraPosition }
+
+
+--ff : CameraPosition -> CameraPosition
+--ff cp =
+    --Point3d.translateBy (Vector3d.fromMeters { x = 1, y = 2, z = 3 }) cp
+    --Point3d.translateBy (Direction3d.from { x = 1, y = 2, z = 3 }) cp
+
 
 updateWorld : Model -> World
 updateWorld model =
-  let
-    newCamera = camera 40 20 30
-    newWorld = setCamera newCamera model.world
-  in
+    let
+        xyz = Point3d.toMeters model.world.cameraPosition
+        x = .x xyz + 1
+        y = .y xyz + 1
+        z = .y xyz + 1
+
+        newCameraPosition =
+            Point3d.translateBy (Vector3d.fromMeters { x = 1, y = 0, z = 0 }) model.world.cameraPosition
+
+        newWorld =
+            setCamera newCameraPosition model.world
+    in
     case model.keys.down of
-      True -> newWorld
-      _    -> model.world
+        True ->
+            newWorld
+
+        _ ->
+            model.world
 
 
 update : Msg -> Model -> Model
@@ -183,7 +202,7 @@ update msg model =
             { model | keys = updateKeys isDown key model.keys }
 
         Tick dt ->
-            { model | world = (updateWorld model) }
+            { model | world = updateWorld model }
 
         Resized width height ->
             { model
@@ -216,10 +235,15 @@ noKeys : Keys
 noKeys =
     Keys False False False False False
 
+
+type alias CameraPosition =
+    Point3d Meters WorldCoordinates
+
+
 type alias World =
-  {
-    camera: Camera3d Meters WorldCoordinates
-  }
+    { cameraPosition : CameraPosition
+    }
+
 
 type alias Model =
     { keys : Keys
@@ -228,20 +252,24 @@ type alias Model =
     , height : Quantity Int Pixels
     }
 
-camera: Float -> Float -> Float -> Camera3d Meters WorldCoordinates
-camera x y z =
+
+camera : CameraPosition -> Camera3d Meters WorldCoordinates
+camera cp =
     Camera3d.perspective
         { viewpoint =
             Viewpoint3d.lookAt
                 { focalPoint = Point3d.origin
-                , eyePoint = Point3d.centimeters x y z
+                , eyePoint = cp
                 , upDirection = Direction3d.positiveZ
                 }
         , verticalFieldOfView = Angle.degrees 20
         }
 
+
 initWorld : World
-initWorld = World (camera 40 20 30)
+initWorld =
+    World (Point3d.centimeters 40 20 30)
+
 
 init : () -> ( Model, Cmd Msg )
 init _ =
@@ -267,7 +295,7 @@ view : Model -> Html Msg
 view model =
     Scene3d.unlit
         { dimensions = ( model.width, model.height )
-        , camera = model.world.camera
+        , camera = camera model.world.cameraPosition
         , clipDepth = Length.centimeters 5
         , background = transparentBackground
         , entities = [ pyramidEntity ]
