@@ -181,16 +181,20 @@ updateWorld model =
         y = .y xyz + 1
         z = .y xyz + 1
 
-        newCameraPosition =
+        zoomOut =
             Point3d.translateBy (Vector3d.fromMeters { x = 1, y = 0, z = 0 }) model.world.cameraPosition
 
-        newWorld =
-            setCamera newCameraPosition model.world
-    in
-    case model.keys.down of
-        True ->
-            newWorld
+        zoomIn =
+            Point3d.translateBy (Vector3d.fromMeters { x = -1, y = 0, z = 0 }) model.world.cameraPosition
 
+        btPressed = (model.keys.up, model.keys.down)
+    in
+    case btPressed of
+        (True, False) ->
+            setCamera zoomOut model.world
+
+        (False, True) ->
+            setCamera zoomIn model.world
         _ ->
             model.world
 

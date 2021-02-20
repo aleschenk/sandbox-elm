@@ -13,4 +13,4 @@ repl-temp-*
 .vscode
 .idea
 
-main.js
+./main.js
