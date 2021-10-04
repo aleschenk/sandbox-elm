@@ -17,7 +17,9 @@ import Camera3d exposing (Camera3d)
 import Color
 import Direction3d
 import Duration exposing (Duration)
-import Html exposing (Html)
+import Html exposing (Html, div, input, text)
+import Html.Attributes exposing (style, type_, value)
+import Html.Events exposing (onInput)
 import Json.Decode as D
 import Length exposing (Length, Meters)
 import Parameter1d
@@ -129,6 +131,10 @@ type Msg
     | Tick Duration
     | Resized Int Int
     | VisibilityChanged E.Visibility
+    | UpdateSliderX String
+    | UpdateSliderY String
+    | UpdateSliderZ String
+
 
 
 type alias Keys =
@@ -182,10 +188,10 @@ updateWorld model =
         z = .y xyz + 1
 
         zoomOut =
-            Point3d.translateBy (Vector3d.fromMeters { x = 1, y = 0, z = 0 }) model.world.cameraPosition
+            Point3d.translateBy (Vector3d.fromMeters { x = 0.1, y = 0, z = 0 }) model.world.cameraPosition
 
         zoomIn =
-            Point3d.translateBy (Vector3d.fromMeters { x = -1, y = 0, z = 0 }) model.world.cameraPosition
+            Point3d.translateBy (Vector3d.fromMeters { x = -0.1, y = 0, z = 0 }) model.world.cameraPosition
 
         btPressed = (model.keys.up, model.keys.down)
     in
@@ -198,6 +204,13 @@ updateWorld model =
         _ ->
             model.world
 
+toInt number defaultValue =
+    case String.toInt number of
+        Just value ->
+            value
+
+        Nothing ->
+            defaultValue
 
 update : Msg -> Model -> Model
 update msg model =
@@ -216,6 +229,19 @@ update msg model =
 
         VisibilityChanged _ ->
             { model | keys = noKeys }
+
+        UpdateSliderX x ->
+            let
+              xyz = Point3d.toMeters model.world.cameraPosition
+              newCameraXPosition = .x xyz + 1
+            in
+              { model | sliderX = (toInt x model.sliderX) }
+
+        UpdateSliderY y ->
+            { model | sliderY = (toInt y model.sliderY) }
+
+        UpdateSliderZ z ->
+            { model | sliderZ = (toInt z model.sliderZ) }
 
 
 
@@ -254,6 +280,9 @@ type alias Model =
     , world : World
     , width : Quantity Int Pixels
     , height : Quantity Int Pixels
+    , sliderX : Int
+    , sliderY : Int
+    , sliderZ : Int
     }
 
 
@@ -269,11 +298,13 @@ camera cp =
         , verticalFieldOfView = Angle.degrees 20
         }
 
+cameraInitXValue = 40
+cameraInitYValue = 20
+cameraInitZValue = 30
 
 initWorld : World
 initWorld =
     World (Point3d.centimeters 40 20 30)
-
 
 init : () -> ( Model, Cmd Msg )
 init _ =
@@ -281,6 +312,9 @@ init _ =
       , world = initWorld
       , width = Pixels.pixels 1024
       , height = Pixels.pixels 768
+      , sliderX = cameraInitXValue
+      , sliderY = cameraInitYValue
+      , sliderZ = cameraInitZValue
       }
     , Cmd.none
     )
@@ -294,16 +328,40 @@ init _ =
 --)
 -- VIEW
 
+viewToolBox : Model -> Html Msg
+viewToolBox model =
+    div
+        [ style "background-color" "white"
+        , style "font" "20px monospace"
+        ]
+        [ text <| "X "
+        , input [ type_ "range", Html.Attributes.min "0", Html.Attributes.max "100", value <| String.fromInt model.sliderX, onInput UpdateSliderX ] []
+        , text <| "" ++ String.fromInt model.sliderX
+        , Html.br [] []
+        , text <| "Y "
+        , input [ type_ "range", Html.Attributes.min "0", Html.Attributes.max "100", value <| String.fromInt model.sliderY, onInput UpdateSliderY ] []
+        , text <| "" ++ String.fromInt model.sliderY
+        , Html.br [] []
+        , text <| "Z "
+        , input [ type_ "range", Html.Attributes.min "0", Html.Attributes.max "100", value <| String.fromInt model.sliderZ, onInput UpdateSliderZ ] []
+        , text <| String.fromInt model.sliderZ
+        ]
+
 
 view : Model -> Html Msg
 view model =
-    Scene3d.unlit
+    div [] [
+      viewToolBox model
+      , Scene3d.unlit
         { dimensions = ( model.width, model.height )
         , camera = camera model.world.cameraPosition
         , clipDepth = Length.centimeters 5
         , background = transparentBackground
+        --, background = backgroundColor (Color.rgb 50 50 50)
         , entities = [ pyramidEntity ]
+        --, entities = pointEntities2
         }
+      ]
 
 
 main : Program () Model Msg

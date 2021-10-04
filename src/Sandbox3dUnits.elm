@@ -52,7 +52,7 @@ update : Msg -> Model -> Model
 update message model =
     case message of
         UpdateSliderX x ->
-            Model (toInt x model.sliderX) model.sliderY model.sliderZ
+            { model | sliderX = toInt x model.sliderX}
 
         UpdateSliderY y ->
             Model model.sliderX (toInt y model.sliderY) model.sliderZ
@@ -75,15 +75,15 @@ view model =
         [ style "background-color" "white"
         , style "font" "20px monospace"
         ]
-        [ text <| "X "
+        [ text <| "Camera X "
         , input [ type_ "range", Html.Attributes.min "0", Html.Attributes.max "20", value <| String.fromInt model.sliderX, onInput UpdateSliderX ] []
         , text <| "" ++ String.fromInt model.sliderX
         , Html.br [] []
-        , text <| "Y "
+        , text <| "Camera Y "
         , input [ type_ "range", Html.Attributes.min "0", Html.Attributes.max "20", value <| String.fromInt model.sliderY, onInput UpdateSliderY ] []
         , text <| "" ++ String.fromInt model.sliderY
         , Html.br [] []
-        , text <| "Z "
+        , text <| "Camera Z "
         , input [ type_ "range", Html.Attributes.min "0", Html.Attributes.max "20", value <| String.fromInt model.sliderZ, onInput UpdateSliderZ ] []
         , text <| String.fromInt model.sliderZ
         ]
