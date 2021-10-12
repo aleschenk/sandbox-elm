@@ -17,11 +17,11 @@ import Camera3d exposing (Camera3d)
 import Color
 import Direction3d
 import Duration exposing (Duration)
-import Html exposing (Html, div, input, text)
-import Html.Attributes exposing (style, type_, value)
-import Html.Events exposing (onInput)
+import Html exposing (Html, div, text)
+import Html.Attributes exposing (style, value)
 import Json.Decode as D
 import Length exposing (Length, Meters)
+import LineSegment3d
 import Parameter1d
 import Pixels exposing (Pixels)
 import Point3d exposing (Point3d)
@@ -44,6 +44,53 @@ import Viewpoint3d exposing (Viewpoint3d)
 type WorldCoordinates
     = WorldCoordinates
 
+type alias CameraPosition =
+    Point3d Meters WorldCoordinates
+
+type alias FocalPoint =
+    Point3d Meters WorldCoordinates
+
+
+type Msg
+    = KeyChanged Bool String
+    | Tick Duration
+    | Resized Int Int
+    | VisibilityChanged E.Visibility
+
+type alias Keys =
+    { up : Bool
+    , left : Bool
+    , down : Bool
+    , right : Bool
+    , space : Bool
+    , a : Bool
+    , d : Bool
+    , w : Bool
+    , s : Bool
+    }
+
+type alias World =
+    { cameraPosition : CameraPosition
+    , cameraFocalPoint: FocalPoint
+    }
+
+type alias Model =
+    { keys : Keys
+    , world : World
+    , width : Quantity Int Pixels
+    , height : Quantity Int Pixels
+    , sliderX : Int
+    , sliderY : Int
+    , sliderZ : Int
+    }
+
+cameraInitXValue = 1
+cameraInitYValue = -5
+cameraInitZValue = 1
+
+initWorld : World
+initWorld =
+    World (Point3d.meters cameraInitXValue cameraInitYValue cameraInitZValue) Point3d.origin
 
 
 --mesh : Plain coordinates
@@ -125,25 +172,53 @@ pyramidMesh =
     -- Mesh.indexedFacets so that normal vectors will be generated for each face
     Mesh.indexedFacets triangularMesh
 
+basePlane : Entity coordinates
+basePlane =
+  let
+    p1 = Point3d.meters -1 -1 0
+    p2 = Point3d.meters -1 1 0
+    p3 = Point3d.meters 1 1 0
+    p4 = Point3d.meters 1 -1 0
+  in
+    Scene3d.quad (Material.color Color.lightOrange) p1 p2 p3 p4
 
-type Msg
-    = KeyChanged Bool String
-    | Tick Duration
-    | Resized Int Int
-    | VisibilityChanged E.Visibility
-    | UpdateSliderX String
-    | UpdateSliderY String
-    | UpdateSliderZ String
+tile : Float -> Float -> Entity coorindates
+tile x y =
+  let
+    width = 1
+    hight = 1
+    p1 = Point3d.meters -1 -1 0
+    p2 = Point3d.meters -1 1 0
+    p3 = Point3d.meters 1 1 0
+    p4 = Point3d.meters 1 -1 0
+  in
+    Scene3d.quad (Material.color Color.lightOrange) p1 p2 p3 p4
+
+gizmo : List (Entity coordinates)
+gizmo =
+  let
+    materialX = Material.color Color.red
+    materialY = Material.color Color.green
+    materialZ = Material.color Color.blue
+    startPoint = Point3d.meters 0 0 0
+  in
+    [ Scene3d.lineSegment materialX (LineSegment3d.from startPoint (Point3d.meters 1 0 0))
+    , Scene3d.lineSegment materialY (LineSegment3d.from startPoint (Point3d.meters 0 1 0))
+    , Scene3d.lineSegment materialZ (LineSegment3d.from startPoint (Point3d.meters 0 0 1))
+    ]
 
 
-
-type alias Keys =
-    { up : Bool
-    , left : Bool
-    , down : Bool
-    , right : Bool
-    , space : Bool
-    }
+camera : CameraPosition -> FocalPoint -> Camera3d Meters WorldCoordinates
+camera cp fp =
+    Camera3d.perspective
+        { viewpoint =
+            Viewpoint3d.lookAt
+                { focalPoint = fp
+                , eyePoint = cp
+                , upDirection = Direction3d.positiveZ
+                }
+        , verticalFieldOfView = Angle.degrees 20
+        }
 
 
 updateKeys : Bool -> String -> Keys -> Keys
@@ -164,13 +239,25 @@ updateKeys isDown key keys =
         "ArrowRight" ->
             { keys | right = isDown }
 
+        "a" ->
+            { keys | a = isDown }
+
+        "d" ->
+            { keys | d = isDown }
+
+        "w" ->
+            { keys | w = isDown }
+
+        "s" ->
+            { keys | s = isDown }
+
         _ ->
             keys
 
 
-setCamera : CameraPosition -> World -> World
-setCamera newCameraPosition world =
-    { world | cameraPosition = newCameraPosition }
+setCamera : CameraPosition -> FocalPoint -> World -> World
+setCamera newCameraPosition fp world =
+    { world | cameraPosition = newCameraPosition, cameraFocalPoint = fp }
 
 
 --ff : CameraPosition -> CameraPosition
@@ -178,6 +265,29 @@ setCamera newCameraPosition world =
     --Point3d.translateBy (Vector3d.fromMeters { x = 1, y = 2, z = 3 }) cp
     --Point3d.translateBy (Direction3d.from { x = 1, y = 2, z = 3 }) cp
 
+incX : CameraPosition -> CameraPosition
+incX cameraPosition =
+  Point3d.translateBy (Vector3d.meters 0.1 0 0) cameraPosition
+
+decX : CameraPosition -> CameraPosition
+decX cameraPosition =
+  Point3d.translateBy (Vector3d.meters -0.1 0 0) cameraPosition
+
+incY : CameraPosition -> CameraPosition
+incY cameraPosition =
+  Point3d.translateBy (Vector3d.meters 0 0.1 0) cameraPosition
+
+decY : CameraPosition -> CameraPosition
+decY cameraPosition =
+  Point3d.translateBy (Vector3d.meters 0 -0.1 0) cameraPosition
+
+incZ : CameraPosition -> CameraPosition
+incZ cameraPosition =
+  Point3d.translateBy (Vector3d.meters 0 0 0.1) cameraPosition
+
+decZ : CameraPosition -> CameraPosition
+decZ cameraPosition =
+  Point3d.translateBy (Vector3d.meters 0 0 -0.1) cameraPosition
 
 updateWorld : Model -> World
 updateWorld model =
@@ -187,20 +297,36 @@ updateWorld model =
         y = .y xyz + 1
         z = .y xyz + 1
 
-        zoomOut =
-            Point3d.translateBy (Vector3d.fromMeters { x = 0.1, y = 0, z = 0 }) model.world.cameraPosition
-
-        zoomIn =
-            Point3d.translateBy (Vector3d.fromMeters { x = -0.1, y = 0, z = 0 }) model.world.cameraPosition
-
-        btPressed = (model.keys.up, model.keys.down)
+        btPressed = [model.keys.up, model.keys.down, model.keys.left, model.keys.right, model.keys.a, model.keys.d, model.keys.w, model.keys.s]
     in
     case btPressed of
-        (True, False) ->
-            setCamera zoomOut model.world
+        -- up
+        [True, False, False, False, False, False, False, False] ->
+            setCamera (incY model.world.cameraPosition) model.world.cameraFocalPoint model.world
+        -- down
+        [False, True, False, False, False, False, False, False] ->
+            setCamera (decY model.world.cameraPosition) model.world.cameraFocalPoint model.world
+        -- left
+        [False, False, True, False, False, False, False, False] ->
+            setCamera (decX model.world.cameraPosition) model.world.cameraFocalPoint model.world
+        --  right
+        [False, False, False, True, False, False, False, False] ->
+            setCamera (incX model.world.cameraPosition) model.world.cameraFocalPoint model.world
+        --  a
+        [False, False, False, False, True, False, False, False] ->
+            setCamera model.world.cameraPosition (decX model.world.cameraFocalPoint) model.world
+        --  d
+        [False, False, False, False, False, True, False, False] ->
+            setCamera model.world.cameraPosition (incX model.world.cameraFocalPoint) model.world
 
-        (False, True) ->
-            setCamera zoomIn model.world
+        --  w
+        [False, False, False, False, False, False, True, False] ->
+            setCamera model.world.cameraPosition (incY model.world.cameraFocalPoint) model.world
+
+        --  s
+        [False, False, False, False, False, False, False, True] ->
+            setCamera model.world.cameraPosition (decY model.world.cameraFocalPoint) model.world
+
         _ ->
             model.world
 
@@ -211,6 +337,10 @@ toInt number defaultValue =
 
         Nothing ->
             defaultValue
+
+noKeys : Keys
+noKeys =
+    Keys False False False False False False False False False
 
 update : Msg -> Model -> Model
 update msg model =
@@ -230,20 +360,6 @@ update msg model =
         VisibilityChanged _ ->
             { model | keys = noKeys }
 
-        UpdateSliderX x ->
-            let
-              xyz = Point3d.toMeters model.world.cameraPosition
-              newCameraXPosition = .x xyz + 1
-            in
-              { model | sliderX = (toInt x model.sliderX) }
-
-        UpdateSliderY y ->
-            { model | sliderY = (toInt y model.sliderY) }
-
-        UpdateSliderZ z ->
-            { model | sliderZ = (toInt z model.sliderZ) }
-
-
 
 -- SUBSCRIPTIONS
 -- Subscribe to animation frames and wrap each time step (a number of
@@ -261,50 +377,6 @@ subscriptions model =
         ]
 
 
-noKeys : Keys
-noKeys =
-    Keys False False False False False
-
-
-type alias CameraPosition =
-    Point3d Meters WorldCoordinates
-
-
-type alias World =
-    { cameraPosition : CameraPosition
-    }
-
-
-type alias Model =
-    { keys : Keys
-    , world : World
-    , width : Quantity Int Pixels
-    , height : Quantity Int Pixels
-    , sliderX : Int
-    , sliderY : Int
-    , sliderZ : Int
-    }
-
-
-camera : CameraPosition -> Camera3d Meters WorldCoordinates
-camera cp =
-    Camera3d.perspective
-        { viewpoint =
-            Viewpoint3d.lookAt
-                { focalPoint = Point3d.origin
-                , eyePoint = cp
-                , upDirection = Direction3d.positiveZ
-                }
-        , verticalFieldOfView = Angle.degrees 20
-        }
-
-cameraInitXValue = 40
-cameraInitYValue = 20
-cameraInitZValue = 30
-
-initWorld : World
-initWorld =
-    World (Point3d.centimeters 40 20 30)
 
 init : () -> ( Model, Cmd Msg )
 init _ =
@@ -334,19 +406,18 @@ viewToolBox model =
         [ style "background-color" "white"
         , style "font" "20px monospace"
         ]
-        [ text <| "X "
-        , input [ type_ "range", Html.Attributes.min "0", Html.Attributes.max "100", value <| String.fromInt model.sliderX, onInput UpdateSliderX ] []
-        , text <| "" ++ String.fromInt model.sliderX
+        [ text <| "Eye X: " ++ String.fromFloat (.x (Point3d.toMeters model.world.cameraPosition))
         , Html.br [] []
-        , text <| "Y "
-        , input [ type_ "range", Html.Attributes.min "0", Html.Attributes.max "100", value <| String.fromInt model.sliderY, onInput UpdateSliderY ] []
-        , text <| "" ++ String.fromInt model.sliderY
+        , text <| "Eye Y: " ++ String.fromFloat (.y (Point3d.toMeters model.world.cameraPosition))
         , Html.br [] []
-        , text <| "Z "
-        , input [ type_ "range", Html.Attributes.min "0", Html.Attributes.max "100", value <| String.fromInt model.sliderZ, onInput UpdateSliderZ ] []
-        , text <| String.fromInt model.sliderZ
+        , text <| "Eye Z: " ++ String.fromFloat (.z (Point3d.toMeters model.world.cameraPosition))
+        , Html.br [] []
+        , text <| "Fp X: " ++ String.fromFloat (.x (Point3d.toMeters model.world.cameraFocalPoint))
+        , Html.br [] []
+        , text <| "Fp Y: " ++ String.fromFloat (.y (Point3d.toMeters model.world.cameraFocalPoint))
+        , Html.br [] []
+        , text <| "Fp Z: " ++ String.fromFloat (.z (Point3d.toMeters model.world.cameraFocalPoint))
         ]
-
 
 view : Model -> Html Msg
 view model =
@@ -354,11 +425,11 @@ view model =
       viewToolBox model
       , Scene3d.unlit
         { dimensions = ( model.width, model.height )
-        , camera = camera model.world.cameraPosition
+        , camera = camera model.world.cameraPosition model.world.cameraFocalPoint
         , clipDepth = Length.centimeters 5
         , background = transparentBackground
         --, background = backgroundColor (Color.rgb 50 50 50)
-        , entities = [ pyramidEntity ]
+        , entities = [ basePlane ] ++ gizmo
         --, entities = pointEntities2
         }
       ]
