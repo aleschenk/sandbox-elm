@@ -19,7 +19,7 @@ import Direction3d
 import Duration exposing (Duration)
 import Html exposing (Html, div, text)
 import Html.Attributes exposing (style, value)
-import Json.Decode as D
+import Json.Decode as Decode exposing (Decoder)
 import Length exposing (Length, Meters)
 import LineSegment3d
 import Parameter1d
@@ -56,6 +56,9 @@ type Msg
     | Tick Duration
     | Resized Int Int
     | VisibilityChanged E.Visibility
+    | MouseDown
+    | MouseUp
+    | MouseMove (Quantity Float Pixels) (Quantity Float Pixels)
 
 type alias Keys =
     { up : Bool
@@ -79,9 +82,8 @@ type alias Model =
     , world : World
     , width : Quantity Int Pixels
     , height : Quantity Int Pixels
-    , sliderX : Int
-    , sliderY : Int
-    , sliderZ : Int
+    , mouseX : Quantity Float Pixels
+    , mouseY : Quantity Float Pixels
     }
 
 cameraInitXValue = 1
@@ -292,11 +294,6 @@ decZ cameraPosition =
 updateWorld : Model -> World
 updateWorld model =
     let
-        xyz = Point3d.toMeters model.world.cameraPosition
-        x = .x xyz + 1
-        y = .y xyz + 1
-        z = .y xyz + 1
-
         btPressed = [model.keys.up, model.keys.down, model.keys.left, model.keys.right, model.keys.a, model.keys.d, model.keys.w, model.keys.s]
     in
     case btPressed of
@@ -357,9 +354,24 @@ update msg model =
                 , height = Pixels.pixels height
             }
 
+        MouseMove dx dy ->
+          { model | mouseX = dx, mouseY = dy }
+
         VisibilityChanged _ ->
             { model | keys = noKeys }
 
+        _ ->
+          model
+
+
+{-| Use movementX and movementY for simplicity (don't need to store initial
+mouse position in the model) - not supported in Internet Explorer though
+-}
+decodeMouseMove : Decoder Msg
+decodeMouseMove =
+    Decode.map2 MouseMove
+        (Decode.field "movementX" (Decode.map Pixels.float Decode.float))
+        (Decode.field "movementY" (Decode.map Pixels.float Decode.float))
 
 -- SUBSCRIPTIONS
 -- Subscribe to animation frames and wrap each time step (a number of
@@ -370,13 +382,12 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ E.onResize (\width height -> Resized width height)
-        , E.onKeyUp (D.map (KeyChanged False) (D.field "key" D.string))
-        , E.onKeyDown (D.map (KeyChanged True) (D.field "key" D.string))
+        , E.onKeyUp (Decode.map (KeyChanged False) (Decode.field "key" Decode.string))
+        , E.onKeyDown (Decode.map (KeyChanged True) (Decode.field "key" Decode.string))
         , E.onAnimationFrameDelta (Duration.milliseconds >> Tick)
         , E.onVisibilityChange VisibilityChanged
+        , E.onMouseMove decodeMouseMove
         ]
-
-
 
 init : () -> ( Model, Cmd Msg )
 init _ =
@@ -384,13 +395,11 @@ init _ =
       , world = initWorld
       , width = Pixels.pixels 1024
       , height = Pixels.pixels 768
-      , sliderX = cameraInitXValue
-      , sliderY = cameraInitYValue
-      , sliderZ = cameraInitZValue
+      , mouseX = Pixels.float 0
+      , mouseY = Pixels.float 0
       }
     , Cmd.none
     )
-
 
 
 --, Cmd.batch
@@ -406,7 +415,11 @@ viewToolBox model =
         [ style "background-color" "white"
         , style "font" "20px monospace"
         ]
-        [ text <| "Eye X: " ++ String.fromFloat (.x (Point3d.toMeters model.world.cameraPosition))
+        [ text <| "Mouse X: " ++ String.fromFloat (Pixels.toFloat model.mouseX)
+        , Html.br [] []
+        , text <| "Mouse Y: " ++ String.fromFloat (Pixels.toFloat model.mouseY)
+        , Html.br [] []
+        , text <| "Eye X: " ++ String.fromFloat (.x (Point3d.toMeters model.world.cameraPosition))
         , Html.br [] []
         , text <| "Eye Y: " ++ String.fromFloat (.y (Point3d.toMeters model.world.cameraPosition))
         , Html.br [] []
